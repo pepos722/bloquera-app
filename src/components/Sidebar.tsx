@@ -11,15 +11,17 @@ import {
   Users,
   ShoppingCart,
   Calculator,
-  FileText
+  FileText,
+  CreditCard
 } from "lucide-react";
 import clsx from "clsx";
 
 const menuItems = [
   { name: "Obras (Inicio)", icon: HardHat, href: "/" },
   { name: "Clientes", icon: Users, href: "/clientes" },
-  { name: "Cotizaciones", icon: FileText, href: "/cotizaciones" },
   { name: "Ventas y Fiados", icon: ShoppingCart, href: "/ventas" },
+  { name: "Pagos y Abonos", icon: CreditCard, href: "/pagos" },
+  { name: "Cotizaciones", icon: FileText, href: "/cotizaciones" },
   { name: "Calculadora", icon: Calculator, href: "/calculadora" },
   { name: "Configuración", icon: Settings, href: "/configuracion" },
 ];
