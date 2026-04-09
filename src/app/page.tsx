@@ -8,6 +8,25 @@ import { supabase } from "@/utils/supabase";
 export const dynamic = 'force-dynamic';
 
 export default async function Dashboard() {
+  // 0. Verificar Sesión y Rol del Usuario
+  const { data: { user } } = await supabase.auth.getUser();
+  let isAdmin = false;
+  
+  if (user) {
+    const { data: perfil, error: perfilError } = await supabase
+      .from('perfiles')
+      .select('rol')
+      .eq('id', user.id)
+      .single();
+      
+    if (!perfilError && perfil) {
+      isAdmin = perfil.rol === 'admin';
+    } else if (perfilError && perfilError.code === '42P01') {
+      // Si la tabla 'perfiles' aún no existe en Supabase, asumimos admin por defecto para no romper la app
+      isAdmin = true;
+    }
+  }
+
   // 1. Obtener Obras Activas
   const { data: obras, error: obrasError } = await supabase
     .from('obras')
@@ -41,52 +60,69 @@ export default async function Dashboard() {
       {/* Encabezado del Dashboard */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Panel de Control</h1>
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+            {isAdmin ? "Panel de Control Directivo" : "Punto de Venta Activo"}
+          </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Resumen financiero y estado de obras al día de hoy.
+            {isAdmin ? "Resumen financiero y estado de obras al día de hoy." : "Bienvenido. Desde aquí puedes registrar nuevas ventas y ver obras activas."}
           </p>
         </div>
       </div>
 
-      {/* Tarjetas de Métricas (Dashboard Financiero) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-        
-        {/* Métrica 1: Ventas Totales */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-            <TrendingUp size={24} />
+      {/* Tarjetas de Métricas (Dashboard Financiero) - SOLO ADMIN */}
+      {isAdmin ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+          
+          {/* Métrica 1: Ventas Totales */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+              <TrendingUp size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Ventas Históricas</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalVendido)}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Ventas Históricas</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalVendido)}</p>
-          </div>
-        </div>
 
-        {/* Métrica 2: Cuentas por Cobrar */}
-        <div className="bg-white rounded-xl shadow-sm border border-red-200 p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
-            <Wallet size={24} />
+          {/* Métrica 2: Cuentas por Cobrar */}
+          <div className="bg-white rounded-xl shadow-sm border border-red-200 p-5 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+              <Wallet size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-red-600 flex items-center gap-1">
+                Cuentas por Cobrar <AlertCircle size={14} />
+              </p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalCuentasPorCobrar)}</p>
+            </div>
+          </div>
+
+          {/* Métrica 3: Obras Activas */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center gap-4 sm:col-span-2 lg:col-span-1">
+            <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+              <HardHat size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Obras Activas</p>
+              <p className="text-2xl font-bold text-gray-900">{obrasActivas} <span className="text-sm font-normal text-gray-500">proyectos</span></p>
+            </div>
+          </div>
+
+        </div>
+      ) : (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-blue-800 flex items-start gap-4">
+          <div className="bg-blue-100 p-3 rounded-full shrink-0">
+            <HardHat size={24} className="text-blue-600" />
           </div>
           <div>
-            <p className="text-sm font-medium text-red-600 flex items-center gap-1">
-              Cuentas por Cobrar <AlertCircle size={14} />
+            <h2 className="font-bold text-lg">Modo Vendedor</h2>
+            <p className="text-sm mt-1">
+              Tu cuenta tiene permisos de vendedor. Tienes acceso al punto de venta, inventario, clientes y cotizaciones. 
+              Por motivos de privacidad, la información financiera general (ventas totales y cuentas por cobrar) está oculta.
             </p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalCuentasPorCobrar)}</p>
           </div>
         </div>
-
-        {/* Métrica 3: Obras Activas */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center gap-4 sm:col-span-2 lg:col-span-1">
-          <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center shrink-0">
-            <HardHat size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Obras Activas</p>
-            <p className="text-2xl font-bold text-gray-900">{obrasActivas} <span className="text-sm font-normal text-gray-500">proyectos</span></p>
-          </div>
-        </div>
-
-      </div>
+      )}
 
       {/* Separador visual */}
       <div className="pt-4 border-t border-gray-200">

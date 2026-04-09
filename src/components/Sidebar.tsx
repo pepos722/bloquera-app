@@ -12,14 +12,20 @@ import {
   ShoppingCart,
   Calculator,
   FileText,
-  CreditCard
+  CreditCard,
+  Package,
+  Truck,
+  LogOut
 } from "lucide-react";
 import clsx from "clsx";
+import { supabase } from "@/utils/supabase";
 
 const menuItems = [
   { name: "Obras (Inicio)", icon: HardHat, href: "/" },
   { name: "Clientes", icon: Users, href: "/clientes" },
+  { name: "Inventario", icon: Package, href: "/inventario" },
   { name: "Ventas y Fiados", icon: ShoppingCart, href: "/ventas" },
+  { name: "Logística y Entregas", icon: Truck, href: "/logistica" },
   { name: "Pagos y Abonos", icon: CreditCard, href: "/pagos" },
   { name: "Cotizaciones", icon: FileText, href: "/cotizaciones" },
   { name: "Calculadora", icon: Calculator, href: "/calculadora" },
@@ -29,6 +35,22 @@ const menuItems = [
 export function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(true);
+  const [userEmail, setUserEmail] = useState("");
+
+  useEffect(() => {
+    async function fetchUserRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserEmail(user.email || "");
+        const { data: perfil, error } = await supabase.from('perfiles').select('rol').eq('id', user.id).single();
+        if (!error && perfil) {
+          setIsAdmin(perfil.rol === 'admin');
+        }
+      }
+    }
+    fetchUserRole();
+  }, []);
 
   // Cerrar el sidebar en móvil cuando se cambia de ruta
   useEffect(() => {
@@ -43,6 +65,11 @@ export function Sidebar() {
       document.body.style.overflow = "unset";
     }
   }, [isOpen]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    // El onAuthStateChange en MainLayout detectará esto y nos mandará al login
+  };
 
   return (
     <>
@@ -110,17 +137,31 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Pie del Sidebar (Opcional, e ej. perfil de usuario) */}
+        {/* Pie del Sidebar (Perfil y Logout) */}
         <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
-              U
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-gray-900">Usuario</span>
-              <span className="text-xs text-gray-500">Admin</span>
+          <div className="flex items-center justify-between px-3 py-2 mb-2">
+            <div className="flex items-center gap-3">
+              <div className={clsx(
+                "w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm",
+                isAdmin ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
+              )}>
+                {userEmail ? userEmail.charAt(0).toUpperCase() : "U"}
+              </div>
+              <div className="flex flex-col w-32">
+                <span className="text-sm font-medium text-gray-900 truncate" title={userEmail}>
+                  {userEmail || "Usuario"}
+                </span>
+                <span className="text-xs text-gray-500">{isAdmin ? "Dueño / Admin" : "Vendedor"}</span>
+              </div>
             </div>
           </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2 w-full text-left text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium"
+          >
+            <LogOut size={20} />
+            Cerrar Sesión
+          </button>
         </div>
       </aside>
     </>

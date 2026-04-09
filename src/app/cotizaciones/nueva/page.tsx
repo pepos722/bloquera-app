@@ -29,19 +29,21 @@ export default function GeneradorCotizacionesPage() {
   const [nuevaCantidad, setNuevaCantidad] = useState<number | "">("");
   const [nuevoPrecio, setNuevoPrecio] = useState<number | "">("");
 
-  // Cargar inventario desde Supabase
+  // Configuración de Empresa
+  const [empresa, setEmpresa] = useState<any>({ nombre_empresa: "Mi Ferretería", porcentaje_iva: 16 });
+
+  // Cargar inventario y configuración desde Supabase
   useEffect(() => {
-    async function fetchInventario() {
-      const { data, error } = await supabase
-        .from("inventario")
-        .select("*")
-        .order("nombre");
+    async function fetchData() {
+      // 1. Inventario
+      const { data: invData } = await supabase.from("inventario").select("*").order("nombre");
+      if (invData) setInventario(invData);
       
-      if (!error && data) {
-        setInventario(data);
-      }
+      // 2. Configuración Global
+      const { data: confData } = await supabase.from("configuracion").select("*").eq('id', 1).single();
+      if (confData) setEmpresa(confData);
     }
-    fetchInventario();
+    fetchData();
 
     // Cerrar dropdown al hacer clic fuera
     const handleClickOutside = (event: MouseEvent) => {
@@ -72,7 +74,8 @@ export default function GeneradorCotizacionesPage() {
 
   // Totales
   const subtotal = items.reduce((acc, item) => acc + (item.cantidad * item.precioUnitario), 0);
-  const iva = subtotal * 0.16; // 16% IVA (Ajustable)
+  const porcentajeIva = empresa.porcentaje_iva ? Number(empresa.porcentaje_iva) : 0;
+  const iva = subtotal * (porcentajeIva / 100);
   const total = subtotal + iva;
 
   // Formateador de moneda
@@ -101,7 +104,7 @@ export default function GeneradorCotizacionesPage() {
     setItems(items.filter(item => item.id !== id));
   };
 
-  // Función para generar PDF
+    // Función para generar PDF
   const generarPDF = () => {
     if (!clienteNombre || items.length === 0) {
       alert("Por favor ingresa el nombre del cliente y al menos un artículo.");
@@ -110,24 +113,41 @@ export default function GeneradorCotizacionesPage() {
 
     const doc = new jsPDF();
     
-    // Encabezado
+    // Configuración Base de PDF
+    const azul = [37, 99, 235] as [number, number, number];
+    const grisOscuro = [75, 85, 99] as [number, number, number];
+    
+    // --- ENCABEZADO CORPORATIVO ---
     doc.setFontSize(22);
-    doc.setTextColor(37, 99, 235); // Azul
+    doc.setTextColor(...azul);
+    doc.setFont("helvetica", "bold");
     doc.text("COTIZACIÓN", 14, 20);
     
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Fecha: ${new Date().toLocaleDateString("es-MX")}`, 14, 28);
-    
-    // Datos del Cliente
-    doc.setFontSize(12);
+    // Nombre de la Empresa (Dinámico)
+    doc.setFontSize(14);
     doc.setTextColor(0);
-    doc.text(`Cliente: ${clienteNombre}`, 14, 40);
-    if (clienteTelefono) {
-      doc.text(`Teléfono: ${clienteTelefono}`, 14, 46);
-    }
+    doc.text(empresa.nombre_empresa || "Mi Ferretería", 14, 30);
+    
+    // Datos de la Empresa (Dinámicos)
+    doc.setFontSize(9);
+    doc.setTextColor(...grisOscuro);
+    doc.setFont("helvetica", "normal");
+    let yOffset = 36;
+    if (empresa.rfc_empresa) { doc.text(`RFC: ${empresa.rfc_empresa}`, 14, yOffset); yOffset += 5; }
+    if (empresa.telefono_empresa) { doc.text(`Tel: ${empresa.telefono_empresa}`, 14, yOffset); yOffset += 5; }
+    if (empresa.direccion_empresa) { doc.text(empresa.direccion_empresa, 14, yOffset); }
+    
+    // --- DATOS DEL CLIENTE ---
+    doc.setFontSize(10);
+    doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
+    doc.text("Preparado para:", 120, 20);
+    doc.setFont("helvetica", "normal");
+    doc.text(clienteNombre, 120, 26);
+    if (clienteTelefono) { doc.text(`Tel: ${clienteTelefono}`, 120, 31); }
+    doc.text(`Fecha: ${new Date().toLocaleDateString("es-MX")}`, 120, 36);
 
-    // Tabla de Artículos
+    // --- TABLA DE ARTÍCULOS ---
     const tableData = items.map(item => [
       item.cantidad.toString(),
       item.concepto,
@@ -140,15 +160,40 @@ export default function GeneradorCotizacionesPage() {
       head: [['Cant.', 'Descripción', 'P. Unitario', 'Importe']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [37, 99, 235] },
+      headStyles: { fillColor: azul, fontStyle: 'bold' },
+      styles: { fontSize: 9 },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 20 },
+        2: { halign: 'right', cellWidth: 35 },
+        3: { halign: 'right', cellWidth: 35 }
+      }
     });
 
-    // Totales
+    // --- TOTALES ---
     const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.text(`Subtotal: ${formatCurrency(subtotal)}`, 140, finalY);
-    doc.text(`IVA (16%): ${formatCurrency(iva)}`, 140, finalY + 6);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(0);
+    doc.text("Subtotal:", 140, finalY);
+    doc.text(formatCurrency(subtotal), 195, finalY, { align: "right" });
+    
+    if (porcentajeIva > 0) {
+      doc.text(`IVA (${porcentajeIva}%):`, 140, finalY + 6);
+      doc.text(formatCurrency(iva), 195, finalY + 6, { align: "right" });
+    }
+    
+    doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
-    doc.text(`Total: ${formatCurrency(total)}`, 140, finalY + 14);
+    doc.setTextColor(...azul);
+    const totalY = porcentajeIva > 0 ? finalY + 14 : finalY + 8;
+    doc.text("TOTAL:", 140, totalY);
+    doc.text(formatCurrency(total), 195, totalY, { align: "right" });
+
+    // Mensaje de Agradecimiento
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(150);
+    doc.text("¡Gracias por su preferencia! Esta cotización tiene una vigencia de 15 días.", 14, totalY + 20);
 
     // Guardar
     doc.save(`Cotizacion_${clienteNombre.replace(/\s+/g, '_')}.pdf`);
